@@ -1,0 +1,9 @@
+FROM nginx:alpine
+
+# 复制构建好的前端文件
+COPY frontend/dist/ /usr/share/nginx/html
+
+# 复制 nginx 配置（需要先复制到构建上下文）
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80

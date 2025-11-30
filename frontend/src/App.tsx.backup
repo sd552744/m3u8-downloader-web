@@ -1,0 +1,440 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Container,
+  CssBaseline,
+  ThemeProvider,
+  AppBar,
+  Toolbar,
+  Typography,
+  Box,
+  Snackbar,
+  Alert,
+  Button,
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Chip,
+  IconButton,
+} from '@mui/material';
+import {
+  Download as DownloadIcon,
+  CheckCircle,
+  Delete,
+  Settings as SettingsIcon,
+  Add as AddIcon,
+} from '@mui/icons-material';
+import { theme } from './styles/theme';
+import DownloadingTasks from './components/DownloadingTasks';
+import CompletedTasks from './components/CompletedTasks';
+import RecycleBin from './components/RecycleBin';
+import TaskForm from './components/TaskForm';
+import SystemStatus from './components/SystemStatus';
+import SettingsDialog from './components/SettingsDialog';
+import { DownloadTask, SystemInfo, DownloadRequest } from './types';
+import { taskApi, systemApi } from './services/api';
+
+type ViewType = 'downloading' | 'completed' | 'recycle';
+
+function App() {
+  const [currentView, setCurrentView] = useState<ViewType>('downloading');
+  const [tasks, setTasks] = useState<DownloadTask[]>([]);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+
+  const loadTasks = async () => {
+    try {
+      const data = await taskApi.getTasks();
+      setTasks(data);
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+      showMessage('加载任务失败', 'error');
+    }
+  };
+
+  const loadSystemInfo = async () => {
+    try {
+      const data = await systemApi.getInfo();
+      setSystemInfo(data);
+    } catch (error) {
+      console.error('Failed to load system info:', error);
+    }
+  };
+
+  const showMessage = (message: string, severity: 'success' | 'error') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  useEffect(() => {
+    loadTasks();
+    loadSystemInfo();
+    
+    const interval = setInterval(() => {
+      loadTasks();
+      loadSystemInfo();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // 过滤任务数据
+  const downloadingTasks = tasks.filter(task => 
+    ['downloading', 'paused', 'pending', 'queued'].includes(task.status)
+  );
+  
+  const completedTasks = tasks.filter(task => 
+    task.status === 'completed'
+  );
+  
+  const recycleTasks = tasks.filter(task => 
+    task.status === 'deleted'
+  );
+
+  const handleCreateTask = async (taskData: DownloadRequest) => {
+    try {
+      // 应用设置中的线程数
+      const settings = localStorage.getItem('m3u8-downloader-settings');
+      if (settings) {
+        const { maxThreads } = JSON.parse(settings);
+        taskData.max_threads = maxThreads || 10;
+      } else {
+        taskData.max_threads = 10; // 默认10线程
+      }
+      
+      await taskApi.createTask(taskData);
+      showMessage(`任务创建成功: ${taskData.filename}`, 'success');
+      setShowTaskForm(false);
+      loadTasks();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.detail || error.message;
+      showMessage(`创建任务失败: ${errorMsg}`, 'error');
+      throw error;
+    }
+  };
+
+  const handlePauseTask = async (taskId: string) => {
+    try {
+      await taskApi.pauseTask(taskId);
+      showMessage('任务已暂停', 'success');
+      loadTasks();
+    } catch (error) {
+      showMessage('暂停任务失败', 'error');
+    }
+  };
+
+  const handleResumeTask = async (taskId: string) => {
+    try {
+      await taskApi.resumeTask(taskId);
+      showMessage('任务已恢复', 'success');
+      loadTasks();
+    } catch (error) {
+      showMessage('恢复任务失败', 'error');
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await fetch(`http://localhost:8000/api/files/${taskId}`, { 
+        method: 'DELETE' 
+      });
+      showMessage('任务已移到回收站', 'success');
+      loadTasks();
+    } catch (error) {
+      showMessage('删除任务失败', 'error');
+    }
+  };
+
+  const handlePermanentDelete = async (taskId: string) => {
+    try {
+      await taskApi.deleteTask(taskId);
+      showMessage('任务已永久删除', 'success');
+      loadTasks();
+    } catch (error) {
+      showMessage('永久删除失败', 'error');
+    }
+  };
+
+  const handleRestoreTask = async (taskId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/tasks/${taskId}/restore`, {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        showMessage('任务已还原', 'success');
+        loadTasks();
+      } else {
+        throw new Error('还原失败');
+      }
+    } catch (error) {
+      showMessage('还原任务失败', 'error');
+    }
+  };
+
+  const handleDownloadFile = async (taskId: string, filename: string) => {
+    try {
+      console.log(`开始下载文件: ${filename}, 任务ID: ${taskId}`);
+      
+      const response = await fetch(`http://localhost:8000/api/files/${taskId}/download`);
+      
+      if (!response.ok) {
+        throw new Error(`下载失败: ${response.status} ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      showMessage('文件下载完成', 'success');
+      
+    } catch (error: any) {
+      console.error('下载文件失败:', error);
+      showMessage(`文件下载失败: ${error.message}`, 'error');
+    }
+  };
+
+  const handleClearCache = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/system/cleanup-all', {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        showMessage('缓存清理完成', 'success');
+        loadTasks();
+      } else {
+        throw new Error('清理失败');
+      }
+    } catch (error) {
+      showMessage('缓存清理失败', 'error');
+    }
+  };
+
+  const handleUpdateConcurrency = async (maxTasks: number) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/system/update-concurrency', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ max_tasks: maxTasks })
+      });
+      
+      if (response.ok) {
+        showMessage(`并发任务数已更新为 ${maxTasks}`, 'success');
+        loadSystemInfo();
+      } else {
+        throw new Error('更新失败');
+      }
+    } catch (error) {
+      showMessage('更新并发任务数失败', 'error');
+    }
+  };
+
+  const handleEmptyRecycleBin = async () => {
+    if (window.confirm('确定要清空回收站吗？此操作将永久删除所有文件，无法恢复！')) {
+      try {
+        const deletePromises = recycleTasks.map(task => 
+          taskApi.deleteTask(task.task_id)
+        );
+        await Promise.all(deletePromises);
+        showMessage('回收站已清空', 'success');
+        loadTasks();
+      } catch (error) {
+        showMessage('清空回收站失败', 'error');
+      }
+    }
+  };
+
+  const getViewTitle = () => {
+    switch (currentView) {
+      case 'downloading': return '下载中';
+      case 'completed': return '已完成';
+      case 'recycle': return '回收站';
+      default: return '任务列表';
+    }
+  };
+
+  const drawerWidth = 200;
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      
+      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+        <Toolbar>
+          <Typography variant="h5" component="h1" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
+            🎬 M3U8 下载器 Pro
+          </Typography>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <IconButton 
+              color="inherit"
+              onClick={() => setShowSettings(true)}
+              title="设置"
+            >
+              <SettingsIcon />
+            </IconButton>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      <Drawer
+        variant="permanent"
+        sx={{
+          width: drawerWidth,
+          flexShrink: 0,
+          [`& .MuiDrawer-paper`]: { 
+            width: drawerWidth, 
+            boxSizing: 'border-box',
+            top: '64px'
+          },
+        }}
+      >
+        <Toolbar />
+        <Box sx={{ overflow: 'auto', mt: 2 }}>
+          <List>
+            <ListItem 
+              button 
+              selected={currentView === 'downloading'}
+              onClick={() => setCurrentView('downloading')}
+            >
+              <ListItemIcon>
+                <DownloadIcon color={currentView === 'downloading' ? 'primary' : 'inherit'} />
+              </ListItemIcon>
+              <ListItemText primary="下载中" />
+              {downloadingTasks.length > 0 && (
+                <Chip label={downloadingTasks.length} size="small" color="primary" />
+              )}
+            </ListItem>
+            
+            <ListItem 
+              button 
+              selected={currentView === 'completed'}
+              onClick={() => setCurrentView('completed')}
+            >
+              <ListItemIcon>
+                <CheckCircle color={currentView === 'completed' ? 'primary' : 'inherit'} />
+              </ListItemIcon>
+              <ListItemText primary="已完成" />
+              {completedTasks.length > 0 && (
+                <Chip label={completedTasks.length} size="small" color="success" />
+              )}
+            </ListItem>
+            
+            <ListItem 
+              button 
+              selected={currentView === 'recycle'}
+              onClick={() => setCurrentView('recycle')}
+            >
+              <ListItemIcon>
+                <Delete color={currentView === 'recycle' ? 'primary' : 'inherit'} />
+              </ListItemIcon>
+              <ListItemText primary="回收站" />
+              {recycleTasks.length > 0 && (
+                <Chip label={recycleTasks.length} size="small" color="error" />
+              )}
+            </ListItem>
+          </List>
+        </Box>
+      </Drawer>
+
+      <Box sx={{ ml: `${drawerWidth}px`, p: 3 }}>
+        <Toolbar />
+        
+        <SystemStatus info={systemInfo} />
+        
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h4" component="h2">
+            {getViewTitle()}
+          </Typography>
+          
+          {currentView === 'downloading' && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setShowTaskForm(true)}
+            >
+              新建任务
+            </Button>
+          )}
+          
+          {currentView === 'recycle' && recycleTasks.length > 0 && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<Delete />}
+              onClick={handleEmptyRecycleBin}
+            >
+              清空回收站
+            </Button>
+          )}
+        </Box>
+
+        {currentView === 'downloading' && (
+          <DownloadingTasks
+            tasks={downloadingTasks}
+            onPause={handlePauseTask}
+            onResume={handleResumeTask}
+            onDelete={handleDeleteTask}
+          />
+        )}
+        
+        {currentView === 'completed' && (
+          <CompletedTasks
+            tasks={completedTasks}
+            onDownload={handleDownloadFile}
+            onDelete={handleDeleteTask}
+          />
+        )}
+        
+        {currentView === 'recycle' && (
+          <RecycleBin
+            tasks={recycleTasks}
+            onRestore={handleRestoreTask}
+            onPermanentDelete={handlePermanentDelete}
+            onEmptyRecycleBin={handleEmptyRecycleBin}
+          />
+        )}
+      </Box>
+
+      {showTaskForm && (
+        <TaskForm
+          onSubmit={handleCreateTask}
+          onClose={() => setShowTaskForm(false)}
+        />
+      )}
+
+      <SettingsDialog
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        onClearCache={handleClearCache}
+        onUpdateConcurrency={handleUpdateConcurrency}
+        systemInfo={systemInfo}
+      />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </ThemeProvider>
+  );
+}
+
+export default App;

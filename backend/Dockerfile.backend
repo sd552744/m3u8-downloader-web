@@ -1,0 +1,33 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# 为 slim 镜像创建正确的 sources.list
+RUN echo "deb http://mirrors.aliyun.com/debian/ bullseye main" > /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian/ bullseye-updates main" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian-security bullseye-security main" >> /etc/apt/sources.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# 设置 Python 路径
+ENV PYTHONPATH=/app
+
+# 使用清华 PyPI 镜像
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 复制 app 目录中的所有文件到工作目录
+COPY app/ .
+
+# 创建下载目录
+RUN mkdir -p downloads
+
+# 验证 FFmpeg 安装
+RUN which ffmpeg && ffmpeg -version
+
+EXPOSE 8000
+
+CMD ["uvicorn", "main_fixed:app", "--host", "0.0.0.0", "--port", "8000"]
