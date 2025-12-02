@@ -50,7 +50,11 @@ docker-compose up -d
 
 API文档: http://localhost:8000/docs
 
+## API 文档
+启动服务后访问：http://localhost:8000/docs
+
 ## 项目结构
+```text
 m3u8-downloader-web/
 ├── backend/                 # 后端代码
 │   ├── app/
@@ -68,7 +72,6 @@ m3u8-downloader-web/
 ├── nginx/                   # Nginx 配置
 ├── docker-compose.yml       # Docker 编排
 └── README.md               # 项目说明
-## API 文档
-启动服务后访问：http://localhost:8000/docs
+
 
 
