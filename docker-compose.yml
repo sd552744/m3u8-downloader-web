@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: m3u8_backend
+    ports:
+      - "8000:8000"
+    networks:
+      - m3u8_network
+    volumes:
+      - ./backend/downloads:/app/downloads
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile.frontend
+    container_name: m3u8_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - m3u8_network
+
+networks:
+  m3u8_network:
+    driver: bridge
