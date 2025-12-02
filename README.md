@@ -28,20 +28,26 @@
 ### 手动部署
 #### 后端
 cd backend
+
 pip install -r requirements.txt
+
 uvicorn app.main_fixed:app --host 0.0.0.0 --port 8000
 #### 前端
 cd frontend
+
 npm install
+
 npm run build # 将 dist/ 目录部署到 Web 服务器
 ### 使用 Docker 部署（推荐）
 #### 1. 克隆项目：bash
 git clone https://github.com/sd552744/m3u8-downloader-web.git
+
 cd m3u8-downloader-web
 #### 2. 启动服务：
 docker-compose up -d
 #### 3. 访问应用：
 前端: http://localhost
+
 API文档: http://localhost:8000/docs
 
 ## 项目结构
