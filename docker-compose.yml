@@ -15,11 +15,11 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: ./frontend/Dockerfile.frontend
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
     container_name: m3u8_frontend
     ports:
-      - "80:80"
+      - "60003:60003"
     depends_on:
       - backend
     networks:

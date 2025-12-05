@@ -46,7 +46,7 @@ cd m3u8-downloader-web
 #### 2. 启动服务：
 docker-compose up -d
 #### 3. 访问应用：
-前端: http://localhost
+前端: http://localhost:60003
 
 API文档: http://localhost:8000/docs
 
