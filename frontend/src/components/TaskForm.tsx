@@ -25,6 +25,41 @@ const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // 新增状态
+  const [urlStatus, setUrlStatus] = useState<{ valid: boolean | null, message: string }>({
+    valid: null,
+    message: ''
+  });
+  const [checkingUrl, setCheckingUrl] = useState(false);
+
+  // 新增URL验证函数
+  const validateUrl = async () => {
+    if (!formData.url) {
+      setUrlStatus({ valid: false, message: '请输入URL' });
+      return;
+    }
+
+    setCheckingUrl(true);
+    setUrlStatus({ valid: null, message: '验证中...' });
+
+    try {
+      const response = await fetch(formData.url, {
+        method: 'HEAD',
+        mode: 'cors',
+        timeout: 5000
+      });
+      
+      if (response.ok) {
+        setUrlStatus({ valid: true, message: '地址有效 (200)' });
+      } else {
+        setUrlStatus({ valid: false, message: `地址无效 (${response.status})` });
+      }
+    } catch (err) {
+      setUrlStatus({ valid: false, message: '无法访问该地址' });
+    } finally {
+      setCheckingUrl(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,19 +129,43 @@ const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
       
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        {/* 显示URL验证结果 */}
+        {urlStatus.message && (
+          <Alert 
+            severity={urlStatus.valid ? "success" : urlStatus.valid === null ? "info" : "error"} 
+            sx={{ mb: 2 }}
+          >
+            {urlStatus.message}
+          </Alert>
+        )}
 
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
           <Grid container spacing={2}>
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="M3U8 链接"
-                value={formData.url}
-                onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
-                required
-                placeholder="输入 M3U8 链接"
-                helperText="支持防盗链的M3U8链接，自动设置Referer和User-Agent"
-              />
+              {/* 修改为带验证按钮的布局 - 关键调整：将alignSelf改为center */}
+              <Box display="flex" gap={2} alignItems="flex-end">
+                <TextField
+                  fullWidth
+                  label="M3U8 链接"
+                  value={formData.url}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, url: e.target.value }));
+                    // 输入变化时重置验证状态
+                    setUrlStatus({ valid: null, message: '' });
+                  }}
+                  required
+                  placeholder="输入 M3U8 链接"
+                  helperText="支持防盗链的M3U8链接，自动设置Referer和User-Agent"
+                />
+                <Button
+                  variant="outlined"
+                  onClick={validateUrl}
+                  disabled={checkingUrl}
+                  sx={{ minWidth: 100, alignSelf: 'center' }} // 关键修改：将flex-end改为center
+                >
+                  {checkingUrl ? '验证中...' : '验证'}
+                </Button>
+              </Box>
             </Grid>
 
             <Grid item xs={12} sm={8}>
